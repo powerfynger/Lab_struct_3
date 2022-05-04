@@ -51,7 +51,7 @@ bool delete_key(node*, int);
 bool delete_node(node*);
 void print_shell();
 void print_elems();
-void read_command();
+bool read_command();
 
 int main(){
     /**
@@ -119,7 +119,9 @@ bool push_node(node* dir, char* name){
     new_node->is_leaf = 1;
     new_node->parent = dir;
     new_node->num_keys = 0;
-    for(i = 0;i < DEGREE; i++){
+    // strcpy(new_node->children[0]->name, "..");
+    // new_node->children[0] = dir;
+    for(i = 1;i < DEGREE; i++){
 		new_node->children[i] = NULL;
 	}
     for(i = 0;i < DEGREE - 1; i++){
@@ -225,8 +227,13 @@ bool delete_node(node* dir){
         }
         delete_node(dir->children[i]);
     }
-    free(dir);
-    dir = NULL;
+    for(i = 0; i < DEGREE; i++){
+        if((dir->parent)->children[i] == dir){
+            free((dir->parent)->children[i]);
+            (dir->parent)->children[i] = NULL;
+            break;
+        }
+    }
     return 0;
 }
 
@@ -259,7 +266,7 @@ bool delete_key(node* dir, int i){
 }
 //---------------ФУНКЦИИ ВВОДА---------------
 
-void read_command(){
+bool read_command(){
     const enum comands{MKDIR = 'm',TOUCH = 't',RM = 'r',FIND = 'f',CD = 'c',LS = 'l'};
     char extension[MAX_EXTEN_LEN] = {'\0'};
     char line[BUFF_SIZE] = {'0'};
@@ -395,6 +402,44 @@ void read_command(){
         break;
 
     case CD:
+        //###############СЧИТЫВАНИЕ КОМАНДЫ ДО КОНЦА###############
+        for(i = 0; i < 2; i++){
+            command[i] = line[count + i];
+        }
+        if(strcmp(command, "cd")){
+            puts("Команда не найдена");
+            break;
+        }
+        //###############ОБРАБОТКА ПРОБЕЛОВ МЕЖДУ КОМАНДОЙ И ОПЕРАНДАМИ###############
+        count += i + 1;
+        while(line[count] == ' '){
+            count++;
+        }
+        i = 0;
+        //###############ОБРАБОТКА ИМЕНИ ОПЕРАНДА###############
+        while(line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
+            name[i] = line[i+count];
+            i++;
+        }
+        //###############ПРОВЕРКА НА НЕНУЛЕВОЕ ИМЯ###############
+        if(!strcmp(name,"\n") || !strcmp(name,"\0")){
+            curr_node = root;
+            break;
+        }
+        if(!strcmp(name,"..")){
+            curr_node = curr_node->parent;
+            break;
+        }
+        for(i = 0; i < DEGREE; i++){
+            if(curr_node->children[i] == NULL){
+                break;
+            }
+            if(!strcmp(name, curr_node->children[i]->name)){
+                curr_node = curr_node->children[i];
+                return 0;
+            }
+        }
+        printf("cd: Каталога \"%s\" не существует\n", name);
         break;
 
     case LS:
@@ -411,6 +456,7 @@ void read_command(){
         puts("Команда не найдена");
         break;
     }
+    return 1;
 }
 
 //---------------ФУНКЦИИ ВЫВОДА---------------
