@@ -7,12 +7,12 @@
 
 #define MAX_NAME_LEN            30
 #define MAX_EXTEN_LEN           10
+#define MAX_PATH_LEN            4096
 #define CREATION_DATE_LEN       25
 #define DEGREE                  30
 #define PATH_SEP                '/'
 #define BUFF_SIZE               200
 #define USER                    "user1"
-
 
 typedef struct node{
     char num_nodes;
@@ -42,6 +42,7 @@ typedef struct b_tree{
 
 node *root = NULL; // Корень дерева
 node *curr_node = NULL;
+char* current_path = NULL;
 
 char* get_curr_date();
 void init_tree();
@@ -53,6 +54,7 @@ bool delete_node(node*);
 void print_shell();
 void print_elems(bool);
 bool read_command();
+bool find_elem(node* dir, char* name);
 
 int main(){
     /**
@@ -90,7 +92,8 @@ void init_tree(){
         strcpy(root->name, "/");
         strcpy(root->creation_date, get_curr_date());
         curr_node = root;
-        
+        current_path = (char*)realloc(current_path, MAX_PATH_LEN);
+        current_path[0] = PATH_SEP;
     }
     else{
         printf("Out of memory!\n");
@@ -290,7 +293,26 @@ bool delete_key(node* dir, int i){
     return 0;
 }
 
-// bool find_elem(node* dir, char* name)
+bool find_elem(node* dir, char* name){
+    int i;
+    for(i = 0; i < DEGREE - 1;i++){
+        if(dir->keys[i] == NULL){
+            break;
+        }
+        if(!strcmp(name, dir->keys[i]->name)){
+            printf("%s", dir->keys[i]->name);
+        }
+    }
+    for(i = 0; i < DEGREE;i++){
+        if(dir->children[i] == NULL){
+            break;
+        }
+        if(strcmp(name, dir->children[i]->name)){
+            printf("%s", dir->children[i]->name);
+        }
+    }
+
+}
 
 //---------------ФУНКЦИИ ВВОДА---------------
 
@@ -328,6 +350,7 @@ bool read_command(){
             puts("mkdir: пропущен операнд");
             break;
         }
+        //###############ПРОВЕРКА НА СУЩЕСТВОВАНИЯ ФАЙЛА С ТАКИМ ЖЕ ИМЕНЕМ###############
         for(i = 0; i < DEGREE - 1;i++){
             if(curr_node->keys[i] == NULL){
                 break;
@@ -337,7 +360,6 @@ bool read_command(){
                 return 1;
             }
         }
-
         push_node(curr_node, name);
         break;
 
@@ -453,15 +475,24 @@ bool read_command(){
             name[i] = line[i+count];
             i++;
         }
-        //###############ПРОВЕРКА НА НЕНУЛЕВОЕ ИМЯ###############
+        //###############ПРОВЕРКА НА cd ###############
         if(!strcmp(name,"\n") || !strcmp(name,"\0")){
             curr_node = root;
+            for(i = 1; i < strlen(current_path);i++){
+                current_path[i] = '\0';
+            }
             break;
         }
+        //###############ПРОВЕРКА НА cd .. ###############
         if(!strcmp(name,"..")){
+            count = strlen(current_path);
+            for(i = count - strlen(curr_node->name) - 1; i < count;i++){
+                current_path[i] = '\0';
+            }
             curr_node = curr_node->parent;
             break;
         }
+        //###############ПРОВЕРКА НА cd . ###############
         if(!strcmp(name,".")){
             break;
         }
@@ -470,6 +501,11 @@ bool read_command(){
                 break;
             }
             if(!strcmp(name, curr_node->children[i]->name)){
+                count = strlen(current_path);
+                for(int j = 0; j < strlen(name);j++){
+                    current_path[j+count] = name[j];
+                }
+                current_path[strlen(current_path)] = PATH_SEP;
                 curr_node = curr_node->children[i];
                 return 0;
             }
@@ -513,7 +549,7 @@ bool read_command(){
 //---------------ФУНКЦИИ ВЫВОДА---------------
 
 void print_shell(){
-    printf("%s >> ", curr_node->name);
+    printf("%s >> ", current_path);//curr_node->name);
 }
 
 //---------------СЛУЖЕБНЫЕ ФУНКЦИИ---------------
