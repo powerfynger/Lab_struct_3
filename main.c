@@ -11,10 +11,12 @@
 #define DEGREE                  30
 #define PATH_SEP                '/'
 #define BUFF_SIZE               200
+#define USER                    "user1"
 
 
 typedef struct node{
-    int num_keys;
+    char num_nodes;
+    char num_keys;
     struct key *keys[DEGREE - 1];
     struct node *children[DEGREE];
     struct node *parent;
@@ -50,7 +52,7 @@ bool delete_elem(node*, char*, char*, bool);
 bool delete_key(node*, int);
 bool delete_node(node*);
 void print_shell();
-void print_elems();
+void print_elems(bool);
 bool read_command();
 
 int main(){
@@ -81,6 +83,7 @@ void init_tree(){
     if(root){
         root->is_leaf = 0;
         root->num_keys = 0;
+        root->num_nodes = 0;
         root->parent = NULL;
         for(int i = 0;i < DEGREE; i++){
 		    root->children[i] = NULL;
@@ -97,6 +100,11 @@ void init_tree(){
 }
 
 bool push_node(node* dir, char* name){
+    //###############ПРОВЕРКА НА МАКС КОЛИЧЕСТВО ДИРЕКТОРИЙ###############
+    if(dir->num_nodes+1 == DEGREE){
+        printf("mkdir: Превышен лимит количества каталогов в директории \"%s\"\n", dir->name);
+        return 1;
+    }
     int i = 0;
     bool flag = 0;
     //###############ПРОВЕРКА НА СУЩЕСТВОВАНИЯ КАТАЛОГА С ТАКИМ ИМЕНЕМ###############
@@ -118,9 +126,8 @@ bool push_node(node* dir, char* name){
     }
     new_node->is_leaf = 1;
     new_node->parent = dir;
+    new_node->num_nodes = 0;
     new_node->num_keys = 0;
-    // strcpy(new_node->children[0]->name, "..");
-    // new_node->children[0] = dir;
     for(i = 1;i < DEGREE; i++){
 		new_node->children[i] = NULL;
 	}
@@ -134,6 +141,7 @@ bool push_node(node* dir, char* name){
         if(dir->children[i] == NULL){
             dir->children[i] = new_node;
             flag = 1;
+            dir->num_nodes++;
             break;
         }
     }
@@ -143,6 +151,10 @@ bool push_node(node* dir, char* name){
 }
 
 bool push_key(node* dir, char* name, char* extension){
+     if(dir->num_nodes+1 == DEGREE - 1){
+        printf("mkdir: Превышен лимит количества файлов в директории \"%s\"\n", dir->name);
+        return 1;
+    }
     int i = 0;
     bool flag = 0;
     //###############СОЗДАНИЕ НОВОГО КЛЮЧА###############
@@ -159,6 +171,7 @@ bool push_key(node* dir, char* name, char* extension){
     for(i = 0; i < DEGREE - 1;i++){
         if(dir->keys[i] == NULL || (!strcmp(dir->keys[i]->name, name) && !strcmp(dir->keys[i]->extension, extension))){
             dir->keys[i] = new_key;
+            dir->num_keys++;
             flag = 1;
             break;
         }
@@ -167,21 +180,34 @@ bool push_key(node* dir, char* name, char* extension){
     return 0;
 }
 
-void print_elems(){
+void print_elems(bool is_key){
     int i = 0;
-    while(curr_node->keys[i] != NULL){
-        printf("%s%s ", curr_node->keys[i]->name, curr_node->keys[i]->extension);
-        i++;
+    if(is_key){
+         while(curr_node->keys[i] != NULL){
+            printf("%s %s %s %s%s ", USER, USER, curr_node->keys[i]->creation_date,curr_node->keys[i]->name, curr_node->keys[i]->extension);
+            i++;
+        }
+        i = 0;
+        while(curr_node->children[i] != NULL){
+            printf("%s %s %s %d %s/ ", USER, USER, curr_node->children[i]->creation_date, curr_node->children[i]->num_keys+curr_node->children[i]->num_nodes,curr_node->children[i]->name);
+            i++;
+        }
     }
-    i = 0;
-    while(curr_node->children[i] != NULL){
-        printf("%s/ ", curr_node->children[i]->name);
-        i++;
+    else{
+        while(curr_node->keys[i] != NULL){
+            printf("%s%s ", curr_node->keys[i]->name, curr_node->keys[i]->extension);
+            i++;
+        }
+        i = 0;
+        while(curr_node->children[i] != NULL){
+            printf("%s/ ", curr_node->children[i]->name);
+            i++;
+        }
     }
-    puts(" ");
+        puts(" ");
 }
 
-bool delete_elem(node* dir, char* name, char* extension,bool is_req){
+bool delete_elem(node* dir, char* name, char* extension,bool is_key){
     int i = 0;
     bool flag = 0;
     for(i = 0; i < DEGREE - 1; i++){
@@ -198,7 +224,7 @@ bool delete_elem(node* dir, char* name, char* extension,bool is_req){
             break;
         }
         if(!strcmp(dir->children[i]->name, name)){
-            if(!is_req){
+            if(!is_key){
                 printf("rm: невозможно удалить \"%s\": Это каталог\n", name);
                 return 1;
             }
@@ -273,7 +299,7 @@ bool read_command(){
     char name[MAX_NAME_LEN] = {'\0'};
     char command[6] = {'\0'};
     int count = 0;
-    bool is_req = 0;
+    bool is_key = 0;
     int i = 0;
     fgets(line, sizeof(line),stdin);
     while(line[count] == ' '){
@@ -301,6 +327,16 @@ bool read_command(){
             puts("mkdir: пропущен операнд");
             break;
         }
+        for(i = 0; i < DEGREE - 1;i++){
+            if(curr_node->keys[i] == NULL){
+                break;
+            }
+            if(!strcmp(name, curr_node->keys[i]->name)){
+                printf("mkdir: невозможно создать каталог \"%s\": Файл существует\n", name);
+                return 1;
+            }
+        }
+
         push_node(curr_node, name);
         break;
 
@@ -331,6 +367,16 @@ bool read_command(){
             extension[i] = line[i+count];
             i++;
         }
+        if(!strcmp(extension,"\n") || !strcmp(extension,"\0")){
+            for(i = 0; i < DEGREE - 1;i++){
+                if(curr_node->children[i] == NULL){
+                    break;
+                }
+                if(!strcmp(curr_node->children[i]->name, name)){
+                    return 1;
+                }
+            }
+        }
         push_key(curr_node, name, extension);
         break;
     case RM:
@@ -350,7 +396,7 @@ bool read_command(){
         //###############СЧИТЫВАНИЕ КЛЮЧЕЙ ДО ОПЕРНДОВ###############
         if(line[count] == '-'){
             if(line[count+1] == 'r'){
-                is_req = 1;
+                is_key = 1;
                 count+=2;
             }
             else{
@@ -387,7 +433,7 @@ bool read_command(){
         }
         if(line[count] == '-'){
             if(line[count+1] == 'r'){
-                is_req = 1;
+                is_key = 1;
                 count+=2;
             }
             else{
@@ -395,7 +441,7 @@ bool read_command(){
                 break;
             }
         }
-        delete_elem(curr_node, name, extension, is_req);
+        delete_elem(curr_node, name, extension, is_key);
         break;
 
     case FIND:
@@ -430,6 +476,9 @@ bool read_command(){
             curr_node = curr_node->parent;
             break;
         }
+        if(!strcmp(name,".")){
+            break;
+        }
         for(i = 0; i < DEGREE; i++){
             if(curr_node->children[i] == NULL){
                 break;
@@ -450,7 +499,23 @@ bool read_command(){
             puts("Команда не найдена");
             break;
         }
-        print_elems();
+        //###############ОБРАБОТКА ПРОБЕЛОВ МЕЖДУ КОМАНДОЙ И ОПЕРАНДАМИ###############
+        count += i + 1;
+        while(line[count] == ' '){
+            count++;
+        }
+        //###############СЧИТЫВАНИЕ КЛЮЧЕЙ###############
+        if(line[count] == '-'){
+            if(line[count+1] == 'l'){
+                is_key = 1;
+                count+=2;
+            }
+            else{
+                printf("ls: неверный ключ — \"%c\"", line[count+1]);
+                break;
+            }
+        }
+        print_elems(is_key);
         break;
     default:
         puts("Команда не найдена");
@@ -470,5 +535,7 @@ void print_shell(){
 
 char* get_curr_date(){
     time_t now = time(0);
-    return asctime(localtime(&now));
+    char* a = asctime(localtime(&now));
+    a[strlen(a) - 1] = '\0';
+    return a;
 }
