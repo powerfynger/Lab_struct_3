@@ -403,7 +403,7 @@ bool read_command(){
         }
         i = 0;
         //###############ОБРАБОТКА ИМЕНИ ОПЕРАНДА###############
-        while(line[i+count] != '.' && line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
+        while(line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
             name[i] = line[i+count];
             i++;
         }
