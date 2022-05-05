@@ -29,8 +29,7 @@ typedef struct node{
 }node;
 
 typedef struct key{
-    char name[MAX_NAME_LEN + 1];
-    char extension[MAX_EXTEN_LEN + 1];
+    char name[MAX_NAME_LEN + MAX_EXTEN_LEN + 1];
     char creation_date[CREATION_DATE_LEN + 1];
     node* directory;
 }key;
@@ -47,8 +46,8 @@ node *curr_node = NULL;
 char* get_curr_date();
 void init_tree();
 bool push_node(node*, char*);
-bool push_key(node*, char*, char*);
-bool delete_elem(node*, char*, char*, bool);
+bool push_key(node*, char*);
+bool delete_elem(node*, char*, bool);
 bool delete_key(node*, int);
 bool delete_node(node*);
 void print_shell();
@@ -150,7 +149,7 @@ bool push_node(node* dir, char* name){
     return 0;
 }
 
-bool push_key(node* dir, char* name, char* extension){
+bool push_key(node* dir, char* name){
      if(dir->num_nodes+1 == DEGREE - 1){
         printf("mkdir: Превышен лимит количества файлов в директории \"%s\"\n", dir->name);
         return 1;
@@ -166,10 +165,9 @@ bool push_key(node* dir, char* name, char* extension){
     }
     strcpy(new_key->creation_date, get_curr_date());
     strcpy(new_key->name, name);
-    strcpy(new_key->extension, extension);
     //###############ИЗМЕНЕНИЕ ТЕКУЩЕГО КАТАЛОГА###############
     for(i = 0; i < DEGREE - 1;i++){
-        if(dir->keys[i] == NULL || (!strcmp(dir->keys[i]->name, name) && !strcmp(dir->keys[i]->extension, extension))){
+        if(dir->keys[i] == NULL || (!strcmp(dir->keys[i]->name, name))){
             dir->keys[i] = new_key;
             dir->num_keys++;
             flag = 1;
@@ -184,18 +182,18 @@ void print_elems(bool is_key){
     int i = 0;
     if(is_key){
          while(curr_node->keys[i] != NULL){
-            printf("%s %s %s %s%s ", USER, USER, curr_node->keys[i]->creation_date,curr_node->keys[i]->name, curr_node->keys[i]->extension);
+            printf("%s %s %s %s\n", USER, USER, curr_node->keys[i]->creation_date,curr_node->keys[i]->name);
             i++;
         }
         i = 0;
         while(curr_node->children[i] != NULL){
-            printf("%s %s %s %d %s/ ", USER, USER, curr_node->children[i]->creation_date, curr_node->children[i]->num_keys+curr_node->children[i]->num_nodes,curr_node->children[i]->name);
+            printf("%s %s %s %d %s/\n", USER, USER, curr_node->children[i]->creation_date, curr_node->children[i]->num_keys+curr_node->children[i]->num_nodes,curr_node->children[i]->name);
             i++;
         }
     }
     else{
         while(curr_node->keys[i] != NULL){
-            printf("%s%s ", curr_node->keys[i]->name, curr_node->keys[i]->extension);
+            printf("%s ", curr_node->keys[i]->name);
             i++;
         }
         i = 0;
@@ -203,18 +201,19 @@ void print_elems(bool is_key){
             printf("%s/ ", curr_node->children[i]->name);
             i++;
         }
+        if(curr_node->children[0] != NULL || curr_node->keys[0] != NULL) puts(" ");
     }
-        puts(" ");
+        
 }
 
-bool delete_elem(node* dir, char* name, char* extension,bool is_key){
+bool delete_elem(node* dir, char* name, bool is_key){
     int i = 0;
     bool flag = 0;
     for(i = 0; i < DEGREE - 1; i++){
         if(dir->keys[i] == NULL){
             break;
         }
-        if(!strcmp(dir->keys[i]->name, name) && !strcmp(dir->keys[i]->extension, extension)){
+        if(!strcmp(dir->keys[i]->name, name)){
             delete_key(dir, i);
             return 0;
         }
@@ -290,11 +289,13 @@ bool delete_key(node* dir, int i){
     }
     return 0;
 }
+
+// bool find_elem(node* dir, char* name)
+
 //---------------ФУНКЦИИ ВВОДА---------------
 
 bool read_command(){
     const enum comands{MKDIR = 'm',TOUCH = 't',RM = 'r',FIND = 'f',CD = 'c',LS = 'l'};
-    char extension[MAX_EXTEN_LEN] = {'\0'};
     char line[BUFF_SIZE] = {'0'};
     char name[MAX_NAME_LEN] = {'\0'};
     char command[6] = {'\0'};
@@ -353,7 +354,7 @@ bool read_command(){
             count++;
         }   
         i = 0;
-        while(line[i+count] != '.' && line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
+        while(line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
             name[i] = line[i+count];
             i++;
         }
@@ -361,23 +362,15 @@ bool read_command(){
             puts("touch: пропущен операнд");
             break;
         }
-        count += i;
-        i = 0;
-        while(line[i+count] != '\n' && line[i+count] != ' ' && line[i+count] != '\0' && i + count < BUFF_SIZE){
-            extension[i] = line[i+count];
-            i++;
-        }
-        if(!strcmp(extension,"\n") || !strcmp(extension,"\0")){
-            for(i = 0; i < DEGREE - 1;i++){
-                if(curr_node->children[i] == NULL){
-                    break;
-                }
-                if(!strcmp(curr_node->children[i]->name, name)){
-                    return 1;
-                }
+        for(i = 0; i < DEGREE - 1;i++){
+            if(curr_node->children[i] == NULL){
+                break;
+            }
+            if(!strcmp(curr_node->children[i]->name, name)){
+                return 1;
             }
         }
-        push_key(curr_node, name, extension);
+        push_key(curr_node, name);
         break;
     case RM:
         //###############СЧИТЫВАНИЕ КОМАНДЫ ДО КОНЦА###############
@@ -420,13 +413,6 @@ bool read_command(){
             break;
         }
         count += i;
-        i = 0;
-        //###############СЧИТЫВАНИЕ РАСШИРЕНИЯ ДЛЯ ФАЙЛА###############
-        while(line[i+count] != '\n' && line[i+count] != ' ' && line[i+count] != '\0' && i + count < BUFF_SIZE){
-            extension[i] = line[i+count];
-            i++;
-        }
-        count += i;
         //###############ОБРАБОТКА ПРОБЕЛОВ МЕЖДУ ОПЕРНАДОМ И ВОЗМОЖНЫМ КЛЮЧОМ###############
         while(line[count] == ' ' && count < BUFF_SIZE){
             count++;
@@ -441,7 +427,7 @@ bool read_command(){
                 break;
             }
         }
-        delete_elem(curr_node, name, extension, is_key);
+        delete_elem(curr_node, name, is_key);
         break;
 
     case FIND:
