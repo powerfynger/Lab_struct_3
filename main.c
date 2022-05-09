@@ -13,6 +13,7 @@
 #define PATH_SEP                '/'
 #define BUFF_SIZE               200
 #define USER                    "user1"
+#define DISK                    "file_system.txt"
 
 typedef struct node{
     char num_nodes;
@@ -149,6 +150,9 @@ bool push_node(node* dir, char* name){
         }
     }
     if(!flag) return 1;
+    FILE* file = fopen(DISK, "a");
+    rewind(file);
+
     dir->is_leaf = 0;
     return 0;
 }
@@ -296,6 +300,7 @@ bool delete_key(node* dir, int i){
 
 bool find_elem(node* dir, char* name){
     int i;
+    size_t count = strlen(current_path);
     // if(go_to_dir(name, 'u')){
     //     for(i = 0; i < DEGREE - 1;i++){
     //         if(curr_node->keys[i] == NULL){
@@ -336,7 +341,22 @@ bool find_elem(node* dir, char* name){
             break;
         }
         find_elem(curr_node->children[i], curr_node->children[i]->name);
+        // printf("%d ", i);
     }
+    if(curr_node != root){
+        curr_node = curr_node->parent;
+        for(i = count - strlen(curr_node->name) + 1; i < MAX_PATH_LEN;i++){
+            current_path[i] = 0;
+        }
+    }
+    // else{
+    //     current_path[0] = PATH_SEP;
+    //     for(i = 1; i < MAX_PATH_LEN;i++){
+    //         current_path[i] = 0;
+    //     }
+    // }
+
+    return 0;
 
 }
 
@@ -527,32 +547,35 @@ bool read_command(){
         }
         //###############ОБРАБОТКА ПРОБЕЛОВ МЕЖДУ КОМАНДОЙ И ОПЕРАНДОМ###############
         count += i + 1;
-        while(line[count] == ' '){
-            count++;
-        }   
-        //###############ОБРАБОТКА ОПЕРАНДA###############
-        i = 0;
-        while(line[i+count] != '\0' && line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
-            name[i] = line[i+count];
-            i++;
-        }
-        local_curr_node = curr_node;
-        strcpy(local_curr_path, current_path);
-        if((!strcmp(name,"\n") || !strcmp(name,"\0")) && (!strcmp(sub_name,"\n") || !strcmp(sub_name,"\0"))){
-            find_elem(root, root->name);
+        // while(1){
+            while(line[count] == ' '){
+                count++;
+            }   
+            //###############ОБРАБОТКА ОПЕРАНДA###############
+            i = 0;
+            while(line[i+count] != '\0' && line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
+                name[i] = line[i+count];
+                i++;
+            }
+            // if(i == 0 && (!strcmp(name,"\n") && !strcmp(name,"\0"))) break;
+            local_curr_node = curr_node;
+            strcpy(local_curr_path, current_path);
+            if((!strcmp(name,"\n") || !strcmp(name,"\0"))){
+                find_elem(root, root->name);
+                curr_node = local_curr_node;
+                for(i = 0; i <MAX_PATH_LEN;i++){
+                    current_path[i] = '\0';
+                }
+                strcpy(current_path,local_curr_path);
+                break;
+            }
+            find_elem(curr_node, name);
             curr_node = local_curr_node;
             for(i = 0; i <MAX_PATH_LEN;i++){
                 current_path[i] = '\0';
             }
             strcpy(current_path,local_curr_path);
-            break;
-        }
-        find_elem(curr_node, name);
-        curr_node = local_curr_node;
-        for(i = 0; i <MAX_PATH_LEN;i++){
-            current_path[i] = '\0';
-        }
-        strcpy(current_path,local_curr_path);
+        // }
         break;
 
     case CD:
