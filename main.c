@@ -296,21 +296,46 @@ bool delete_key(node* dir, int i){
 
 bool find_elem(node* dir, char* name){
     int i;
-    for(i = 0; i < DEGREE - 1;i++){
-        if(dir->keys[i] == NULL){
+    // if(go_to_dir(name, 'u')){
+    //     for(i = 0; i < DEGREE - 1;i++){
+    //         if(curr_node->keys[i] == NULL){
+    //             printf("find : Нет такого файла или каталога\n");
+    //             return 0;
+    //         }
+    //         if(!strcmp(name, curr_node->keys[i]->name)){
+    //             if(curr_node != root) printf("%s", current_path);
+    //             printf("%s\n", name);
+    //             return 1;
+    //         }
+    //     }
+    // }
+    if(go_to_dir(name, 'f')) return 0;
+    printf("%s\n", current_path);
+    for(i = 0; i < DEGREE - 1; i++){
+        if(curr_node->keys[i] == NULL){
             break;
         }
-        if(!strcmp(name, dir->keys[i]->name)){
-            printf("%s", dir->keys[i]->name);
+        if(curr_node == root)
+            printf("%s%s\n", current_path, curr_node->keys[i]->name);
+        else
+            printf("%s/%s\n", current_path, curr_node->keys[i]->name);
         }
-    }
+    // for(i = 0; i < DEGREE; i++){
+    //     if(curr_node->children[i] == NULL){
+    //         break;
+    //     }
+    //     if(curr_node == root)
+    //         printf("%s%s\n", current_path, curr_node->children[i]->name);
+    //     else
+    //         printf("%s/%s\n", current_path, curr_node->children[i]->name);
+    //     }
+    // puts("");
+    // print_elems(0);
     for(i = 0; i < DEGREE;i++){
-        if(dir->children[i] == NULL){
+        if(curr_node->children[i] == NULL){
             break;
         }
-        if(strcmp(name, dir->children[i]->name)){
-            printf("%s", dir->children[i]->name);
-        }
+        find_elem(curr_node->children[i], curr_node->children[i]->name);
     }
 
 }
@@ -321,13 +346,13 @@ bool read_command(){
     const enum comands{MKDIR = 'm',TOUCH = 't',RM = 'r',FIND = 'f',CD = 'c',LS = 'l'};
     char line[BUFF_SIZE] = {'0'};
     char name[MAX_NAME_LEN] = {'\0'};
+    char sub_name[MAX_NAME_LEN] = {'\0'};
     char command[6] = {'\0'};
     int count = 0;
     bool is_key = 0;
     //---------------СОХРАНЯЕМ НА СЛУЧАЙ ИСПОЛЬЗОВАНИЯ АБСОЛЮТНОГО ПУТИ---------------
     node* local_curr_node;
     char local_curr_path[MAX_PATH_LEN];
-
     int i = 0;
     fgets(line, sizeof(line),stdin);
     while(line[count] == ' '){
@@ -410,7 +435,10 @@ bool read_command(){
         }
         local_curr_node = curr_node;
         strcpy(local_curr_path, current_path);
-        go_to_dir(name, 't');
+        if(go_to_dir(name, 't')){
+            printf("touch: невозможно выполнить touch: Нет такого файла или каталога\n");
+        }
+
         // push_key(curr_node, name);
         curr_node = local_curr_node;
         for(i = 0; i <MAX_PATH_LEN;i++){
@@ -490,6 +518,41 @@ bool read_command(){
         break;
 
     case FIND:
+        for(i = 0; i < 4; i++){
+            command[i] = line[count + i];
+        }
+        if(strcmp(command, "find")){
+            puts("Команда не найдена");
+            break;
+        }
+        //###############ОБРАБОТКА ПРОБЕЛОВ МЕЖДУ КОМАНДОЙ И ОПЕРАНДОМ###############
+        count += i + 1;
+        while(line[count] == ' '){
+            count++;
+        }   
+        //###############ОБРАБОТКА ОПЕРАНДA###############
+        i = 0;
+        while(line[i+count] != '\0' && line[i+count] != '\n' && line[i+count] != ' ' && i+count < BUFF_SIZE){
+            name[i] = line[i+count];
+            i++;
+        }
+        local_curr_node = curr_node;
+        strcpy(local_curr_path, current_path);
+        if((!strcmp(name,"\n") || !strcmp(name,"\0")) && (!strcmp(sub_name,"\n") || !strcmp(sub_name,"\0"))){
+            find_elem(root, root->name);
+            curr_node = local_curr_node;
+            for(i = 0; i <MAX_PATH_LEN;i++){
+                current_path[i] = '\0';
+            }
+            strcpy(current_path,local_curr_path);
+            break;
+        }
+        find_elem(curr_node, name);
+        curr_node = local_curr_node;
+        for(i = 0; i <MAX_PATH_LEN;i++){
+            current_path[i] = '\0';
+        }
+        strcpy(current_path,local_curr_path);
         break;
 
     case CD:
@@ -512,9 +575,13 @@ bool read_command(){
             name[i] = line[i+count];
             i++;
         }
+        // local_curr_node = curr_node;
+        // strcpy(local_curr_path, current_path);
         if(go_to_dir(name, 'u')){
             printf("cd: Каталога не существует\n", name);
         }
+        // curr_node = local_curr_node;
+        // strcpy(current_path,local_curr_path);
         break;
 
     case LS:
@@ -597,6 +664,7 @@ bool go_to_dir(char* name, char mode){
     bool flag = 0;
     int i;
     //###############ПРОВЕРКА НА cd ###############
+    
     if(!strcmp(name,"\n") || !strcmp(name,"\0")){
         curr_node = root;
         current_path[0] = PATH_SEP;
@@ -632,9 +700,27 @@ bool go_to_dir(char* name, char mode){
         }
     }
     ptr = strtok(name, "/");
+    if(ptr == NULL) return 0;
     while (1){
         for(i = 0;i < DEGREE;i++){
             if(curr_node->children[i] == NULL){
+                if(mode == 'f'){
+                    for(int j = 0; j < DEGREE - 1;j++){
+                        if(curr_node->keys[j] == NULL){
+                            printf("find : Нет такого файла или каталога\n");
+                            flag = 1;
+                            break;
+                        }
+                        if(strcmp(curr_node->keys[j]->name, ptr) == 0){
+                            if(curr_node == root)
+                                printf("%s%s\n", current_path, curr_node->keys[j]->name);
+                             else
+                                printf("%s/%s\n", current_path, curr_node->keys[j]->name);
+                            flag = 0;
+                            break;
+                        }
+                    }
+                }
                 if(mode == 'm') push_node(curr_node, ptr);
                 else{
                     flag = 1;
@@ -663,9 +749,14 @@ bool go_to_dir(char* name, char mode){
         }
         if(flag == 1) break;
     }
-    if(mode == 't') push_key(curr_node, ptr);
-    //rm and is_key
-    if(mode == 'k' && ptr != NULL) delete_elem(curr_node, ptr, 1);
+    // if(flag) return flag;
+    if(mode == 't'){
+        if(strtok(NULL, "/") == NULL){
+            push_key(curr_node, ptr);
+            flag = 0;
+        }
+    }
+    if((mode == 'k' || mode == 'r') && ptr != NULL) delete_elem(curr_node, ptr, 1);
     return flag;
     
 }
