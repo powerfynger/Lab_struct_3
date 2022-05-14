@@ -16,8 +16,9 @@
 #define DISK                    "file_system.txt"
 
 typedef struct node{
-    char num_nodes;
-    char num_keys;
+    unsigned char num_nodes;
+    unsigned char num_keys;
+
     struct key *keys[DEGREE - 1];
     struct node *children[DEGREE];
     struct node *parent;
@@ -38,7 +39,7 @@ typedef struct key{
 typedef struct b_tree{
   node *root;
   unsigned long long num_of_elem;  
-  short degree;
+  unsigned short degree;
 }b_tree;
 
 node *root = NULL; // Корень дерева
@@ -55,15 +56,20 @@ bool delete_node(node*);
 void print_shell();
 void print_elems(bool);
 bool read_command();
-bool find_elem(node* dir, char* name);
-bool go_to_dir(char* name, char);
+bool find_elem(node*, char*);
+bool go_to_dir(char*, char);
+void init_or_load_options();
+char safe_input();
+bool load_tree();
+bool load_node(node*, FILE*);
+bool save_node(node*, FILE*);
 
 int main(){
     /**
      * @brief Создана корневая папка системы(глобальная переменная root), текущий узел теперь корень
      * 
      */
-    init_tree();
+    init_or_load_options();
     while(1){
         print_shell();
         read_command();
@@ -83,6 +89,7 @@ void init_tree(){
      * @brief Проверка выделилась ли память на дерево
      * 
      */
+    
     if(root){
         root->is_leaf = 0;
         root->num_keys = 0;
@@ -132,7 +139,7 @@ bool push_node(node* dir, char* name){
     new_node->parent = dir;
     new_node->num_nodes = 0;
     new_node->num_keys = 0;
-    for(i = 1;i < DEGREE; i++){
+    for(i = 0;i < DEGREE; i++){
 		new_node->children[i] = NULL;
 	}
     for(i = 0;i < DEGREE - 1; i++){
@@ -146,13 +153,14 @@ bool push_node(node* dir, char* name){
             dir->children[i] = new_node;
             flag = 1;
             dir->num_nodes++;
+            FILE* file = fopen(DISK, "w");
+            save_node(root, file);
+            fclose(file);
             break;
         }
     }
     if(!flag) return 1;
-    FILE* file = fopen(DISK, "a");
-    rewind(file);
-
+    // save_node(new_node);
     dir->is_leaf = 0;
     return 0;
 }
@@ -179,6 +187,9 @@ bool push_key(node* dir, char* name){
             dir->keys[i] = new_key;
             dir->num_keys++;
             flag = 1;
+            FILE* file = fopen(DISK, "w");
+            save_node(root, file);
+            fclose(file);
             break;
         }
     }
@@ -223,12 +234,17 @@ bool delete_elem(node* dir, char* name, bool is_key){
         }
         if(!strcmp(dir->keys[i]->name, name)){
             delete_key(dir, i);
+            dir->num_keys--;
             return 0;
         }
     }
     for(i = 0; i < DEGREE ; i++){
         if(dir->children[i] == NULL){
+            free(dir->children[i-1]);
             break;
+        }
+        if(flag){
+            dir->children[i-1] = dir->children[i];
         }
         if(!strcmp(dir->children[i]->name, name)){
             if(!is_key){
@@ -236,10 +252,12 @@ bool delete_elem(node* dir, char* name, bool is_key){
                 return 1;
             }
             delete_node(dir->children[i]);
-            return 0;
+            dir->num_nodes--;
+            flag = 1;
         }
     }
-    printf("rm: невозможно удалить \"%s\": Нет такого файла или каталога\n", name);
+    if(flag != 1)
+        printf("rm: невозможно удалить \"%s\": Нет такого файла или каталога\n", name);
     return 1;
 
 }
@@ -673,12 +691,48 @@ bool read_command(){
     return 1;
 }
 
+char safe_input() {
+    printf(">> ");
+    char buff[200] = {'\0'};
+    fgets(buff, sizeof(buff), stdin);
+    if(buff[1] != 10){
+        return 0;
+    }
+    
+    return buff[0];
+}
 //---------------ФУНКЦИИ ВЫВОДА---------------
 
 void print_shell(){
     printf("%s >> ", current_path);//curr_node->name);
 }
 
+void init_or_load_options(){
+    char choice;
+    enum ch{init = 2, load = 1, exitt = 0};
+    while (1){
+        puts("Хотите попытаться загрузить существующий диск?\n1 - Да\n2 - Нет");
+        choice = safe_input();
+        switch (choice - '0'){
+        case init:
+            init_tree();
+            return;
+            break;
+        case load:
+            load_tree();
+            return;
+            break;
+        case exitt:
+            exit(EXIT_SUCCESS);
+            break;
+
+        default:
+            puts("Выбор не распознан :(\nНажмите <enter> и повторите попытку...");
+            getchar();
+            break;
+        }
+    }
+}
 //---------------СЛУЖЕБНЫЕ ФУНКЦИИ---------------
 
 bool go_to_dir(char* name, char mode){
@@ -697,6 +751,7 @@ bool go_to_dir(char* name, char mode){
         return flag;
     }
     //###############ПРОВЕРКА НА cd .. ###############
+
     if(!strcmp(name,"..")){
         if(curr_node == root){
             return flag;
@@ -784,6 +839,291 @@ bool go_to_dir(char* name, char mode){
     
 }
 
+bool load_tree(){
+    FILE* file = fopen(DISK, "rb");
+    int i;
+    int k;
+    unsigned char num_keys = 0;
+    unsigned char num_nodes = 0;
+
+    char line[200] = {'\0'};
+    if(file == NULL){
+        printf("Файл не найден.");
+        exit(EXIT_FAILURE);
+    }
+    root = (node*)malloc(sizeof(node));
+    /**
+     * @brief Проверка выделилась ли память на дерево
+     * 
+     */
+    if(root){
+        strcpy(root->name, "/");
+        root->parent = NULL;
+        for(int i = 0;i < DEGREE; i++){
+		    root->children[i] = NULL;
+	    }
+        curr_node = root;
+        current_path = (char*)realloc(current_path, MAX_PATH_LEN);
+        current_path[0] = PATH_SEP;
+        fgets(line, sizeof(line), file);
+
+        //          |mode name num_keys num_nodes creation_date|
+        //          |f / 10 12 Sunday May 12|
+        // Устанавливаем указатель на начало имени 
+        // k = 0;
+        // i = 2; 
+        // while(line[i] != ' '){
+        //     root->name[k] = line[i];
+        //     i++;k++;
+        // }
+        // fseek(file,4, 0L);
+        // fread(&num_keys, sizeof(char), 1, file);
+        // fseek(file, 1, SEEK_CUR);
+        // fread(&num_nodes, sizeof(char), 1, file);
+        i = 4;
+        num_keys = line[i] - '0';
+        // fgetc(file);
+        i += 2;
+        num_nodes = line[i] - '0';
+        root->num_keys = num_keys;
+        root->num_nodes = num_nodes;
+        i = 8;
+        k = 0;
+        while(line[i] != '\0'){
+            root->creation_date[k] = line[i];
+            k++;i++;
+        }
+        load_node(root, file);
+        return 0;
+    }
+    else{
+        printf("Out of memory!\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+bool load_node(node* dir, FILE* file){
+    int i;
+    unsigned char num_keys = 0;
+    unsigned char num_nodes = 0;
+    int k;
+    node* new_node;
+    char count;
+    char line[200] = {'\0'};
+    count = 0;
+    while(count < dir->num_keys){
+        fgets(line, sizeof(line), file);
+        i = 2;
+        k = 0;
+        // dir->keys[count] = (key*)malloc(sizeof(key));
+        key* new_key;
+        new_key = (key*)malloc(sizeof(key));
+        if(!new_key){
+        printf("Out of memmory!\n");
+            exit(EXIT_FAILURE);
+        }
+        while(line[i] != ' '){
+            new_key->name[k] = line[i];
+            // printf("%c", line[i-4]);
+            i++;k++;
+        }
+        k = 0;
+        while(line[i] != '\n'){
+            new_key->creation_date[k] = line[i];
+            i++;k++;
+        }
+        dir->keys[count] = new_key;
+        count++;
+        if(count >= dir->num_keys) break;
+    }
+
+    count = 0;
+    while(count < dir->num_nodes){
+        fgets(line, sizeof(line), file);
+        num_keys = 0;
+        num_nodes = 0;
+        new_node = (node*)malloc(sizeof(node));
+        if(!new_node){
+            printf("Out of memmory!\n");
+            exit(EXIT_FAILURE);
+        }
+        new_node->parent = dir;
+        for(int i = 0;i < DEGREE; i++){
+		    new_node->children[i] = NULL;
+	    }
+        
+        //          |mode name num_keys num_nodes creation_date|
+        //          |f / 10 12 Sunday May 12|
+        // Устанавливаем указатель на начало имени 
+        k = 0;
+        i = 2; 
+        while(line[i] != ' '){
+            new_node->name[k] = line[i];
+            i++;k++;
+        }
+        i++;
+        num_keys = line[i] - '0';
+        // fgetc(file);
+        i += 2;
+        num_nodes = line[i] - '0';
+        // printf("%d ", num_keys);
+        // fread(&num_nodes, sizeof(char), 1, file);
+        // printf("%d ", num_nodes);
+        // getchar();
+        // getchar();
+        i += 2;
+        k = 0;
+        while(line[i] != '\n'){
+            new_node->creation_date[k] = line[i];
+            k++;i++;
+        }
+        new_node->num_keys = num_keys;
+        new_node->num_nodes = num_nodes;
+        for(i = 0; i < DEGREE;i++){
+            if(dir->children[i] == NULL)
+                dir->children[i] = new_node;
+                break;
+            }
+        
+        // fgets(line, sizeof(line), file);
+        load_node(new_node, file);
+        count++;
+    } 
+}
+
+// bool load_node(node* dir, FILE* file){
+//     int i;
+//     int k;
+//     char count;
+//     char line[200] = {'\0'};
+//     fgets(line, sizeof(line), file);
+
+//     printf("|%s|",line);
+//     node* new_node;
+//     if(dir != NULL){
+//         unsigned char num_keys = 0;
+//         unsigned char num_nodes = 0;
+//         new_node = (node*)malloc(sizeof(node));
+//         if(!new_node){
+//             printf("Out of memmory!\n");
+//             exit(EXIT_FAILURE);
+//         }
+//         new_node->parent = dir;
+//         for(int i = 0;i < DEGREE; i++){
+// 		    new_node->children[i] = NULL;
+// 	    }
+        
+//         //          |mode name num_keys num_nodes creation_date|
+//         //          |f / 10 12 Sunday May 12|
+//         // Устанавливаем указатель на начало имени 
+//         k = 0;
+//         i = 2; 
+//         while(line[i] != ' '){
+//             new_node->name[k] = line[i];
+//             i++;k++;
+//         }
+//         i++;
+//         num_keys = line[i] - '0';
+//         // fgetc(file);
+//         i += 2;
+//         num_nodes = line[i] - '0';
+//         printf("%d ", num_keys);
+//         // fread(&num_nodes, sizeof(char), 1, file);
+//         printf("%d ", num_nodes);
+//         getchar();
+//         // getchar();
+//         i += 2;
+//         k = 0;
+//         while(line[i] != '\n'){
+//             new_node->creation_date[k] = line[i];
+//             k++;i++;
+//         }
+//         new_node->num_keys = num_keys;
+//         new_node->num_nodes = num_nodes;
+//         for(i = 0; i < DEGREE;i++){
+//             if(dir->children[i] == NULL)
+//                 dir->children[i] = new_node;
+//                 break;
+//             }
+//     }
+//     else{
+//         new_node = root;
+        
+//     }
+    
+//     count = 0;
+//     //          |mode name creation_date|
+//     //          |k huh Monday May 12|
+//     while(count < new_node->num_keys){
+//         fgets(line, sizeof(line), file);
+//         i = 2;
+//         k = 0;
+//         // dir->keys[count] = (key*)malloc(sizeof(key));
+//         key* new_key;
+//         new_key = (key*)malloc(sizeof(key));
+//         if(!new_key){
+//         printf("Out of memmory!\n");
+//             exit(EXIT_FAILURE);
+//         }
+//         while(line[i] != ' '){
+//             new_key->name[k] = line[i];
+//             // printf("%c", line[i-4]);
+//             i++;k++;
+//         }
+//         k = 0;
+//         while(line[i] != '\n'){
+//             new_key->creation_date[k] = line[i];
+//             i++;k++;
+//         }
+//         new_node->keys[count] = new_key;
+//         count++;
+//         if(count >= new_node->num_keys) break;
+//     }
+//     count = 0;
+//     // printf("%d", count < new_node->num_nodes);
+//     while(count < new_node->num_nodes){
+//         // fgets(line, sizeof(line), file);
+//         load_node(new_node, file);
+//         count++;
+//     }
+// }
+
+bool save_node(node* dir, FILE* file){
+    int i;
+    i = 0;
+    //          |mode name creation_date|
+    //          |k huh Monday May 12|
+    //          |mode name num_keys num_nodes creation_date|
+    //          |f / 10 12 Sunday May 12|
+    //Запись текущего узла
+    // fputs("f ", file);
+    // fputs(dir->name, file);
+    // fputs(" ", file);
+    // fwrite(&dir->num_keys, sizeof(char), 1, file);
+    // // fputc(dir->num_keys, file);
+    // fwrite(&dir->num_nodes, sizeof(char), 1, file);
+    // // fputc(dir->num_nodes, file);
+    // fputs(" ", file);
+    // fputs(dir->creation_date, file);
+    // fputs("\n", file);
+    fprintf(file, "f %s %d %d %s\n", dir->name, dir->num_keys, dir->num_nodes, dir->creation_date);
+    //Запись ключей
+    while(i < dir->num_keys){
+        fprintf(file, "k %s %s\n", dir->keys[i]->name, dir->keys[i]->creation_date);
+        // fputs("k ",file);
+        // fputs(dir->keys[i]->name, file);
+        // fputs(" ", file);
+        // fputs(dir->keys[i]->creation_date, file);
+        // fputs("\n", file);
+        i++;
+    }
+    i = 0;
+    while(i < dir->num_nodes){
+        save_node(dir->children[i], file);
+        i++;
+    }
+
+}
 
 char* get_curr_date(){
     time_t now = time(0);
